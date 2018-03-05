@@ -91,7 +91,6 @@ socket.on('started', function(data){
 	$('#status').text('Connected as ' + data.camera_id + 'with side '+ data.side);
 	window.camera_id = data.camera_id;
 	window.side = data.side;
-	window.steps = data.steps;
 	$('#side').val(data.side);
 	socket.emit('ready');
 });
@@ -106,19 +105,20 @@ var capture = function(step, interval) {
 		ctx.drawImage(video, 0, 0, width, height);
 		var strData = canvas.toDataURL('image/jpeg').replace('data:image/jpeg;base64,','');
 		socket.emit('capture', {'step': step, 'side': window.side, 'image': strData});
-		if(step < window.steps){
+		if(step + 1 < window.steps){
 			setTimeout(capture.bind(undefined, step + 1, interval), interval);
 		} else {
 			$('#stop').click();
-			socket.emit('done');
 		}
 	}
 }
 
 socket.on('startRecording', function(data){
 	var time = new Date(data.time);	
+	window.steps = data.steps;
 	$('#status').text('Starting Recording at: ' + time);
 	console.log('Starting Recording at: ' + time);
+	console.log('Steps: ' + window.steps);
 	setTimeout(function() {
 		capture(0, data.interval);
 	}, time - new Date());
