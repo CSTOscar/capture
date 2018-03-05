@@ -2,11 +2,13 @@ from flask import Flask, render_template, session
 from flask_socketio import SocketIO, send, emit
 from datetime import datetime, timedelta 
 from uuid import uuid4
-from io import BytesIO
-from PIL import Image
+# from io import BytesIO
+# from PIL import Image
+import numpy as np
+import cv2
 import base64
 
-NUM_STEPS = 10
+NUM_STEPS = 30
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
@@ -14,6 +16,7 @@ sio = SocketIO(app)
 
 cameras = dict()
 images = dict()
+cnt = 0
 
 
 @sio.on('start')
@@ -63,15 +66,24 @@ def remove(data):
 @sio.on('capture')
 def capture(data):
     print("Data from: ", data['side'], "on step: ", data['step'])
-    with open('image_{}_{}.jpg'.format(data['side'],data['step']), 'wb') as f:
-        if data['step'] not in images.keys():
-            images[data['step']] = dict()
-        images[data['step']][data['side']] = Image.open(BytesIO(base64.b64decode(data['image'])))
+    step = int(data['step'])
+    if data['step'] not in images.keys():
+        images[step] = dict()
+    arr = np.fromstring(base64.b64decode(data['image'], np.uint8)
+    image = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    cv2.imwrite('image_{}_{}.jpg'.format(data['side'],data['step']), image)  
+    images[step][data['side']] = image
+    cnt += 1
+    if cnt == 2 * NUM_STEPS:
+        done()
 
-@sio.on('done')
+
 def done():
-    ## Do stuff with images
-    pass
+    imageL = list()
+    imageR = list()
+    for i in range(0, NUM_STEPS):
+        imageL.append(images[i]['left'])
+        imageR.append(images[i]['right'])
     
 
 if __name__ == "__main__":
