@@ -1,13 +1,19 @@
 from flask import Flask, render_template, session
 from flask_socketio import SocketIO, send, emit
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta 
 from uuid import uuid4
+from io import BytesIO
+from PIL import Image
+import base64
+
+NUM_STEPS = 10
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
 sio = SocketIO(app)
 
 cameras = dict()
+images = dict()
 
 
 @sio.on('start')
@@ -23,7 +29,7 @@ def start():
         else:
             cameras[session['camera_id']] = 'right';
             payload.update({'side': 'right'})
-        emit('connected', payload, json=True)
+        emit('started', payload, json=True)
 
 
 @sio.on('ready')
@@ -32,10 +38,18 @@ def ready():
     if len(cameras) == 2:
         emit('startRecording', {
             'time': (datetime.utcnow() + timedelta(seconds=2)).isoformat(),
-            'interval':  200 # in ms
+            'interval': 250, # in ms
+            'steps': NUM_STEPS
         }, broadcast=True)
     else:
         emit('wait')
+
+
+@sio.on('stop')
+def stop():
+    emit('stopAll', broadcast=True)
+    print('Stopping..')
+    
 
 
 @sio.on('remove')
@@ -43,23 +57,22 @@ def remove(data):
     cid = data.get('camera_id')
     if cid in cameras.keys():
         del cameras[cid]
-    print(cid + "disconnected.")
-    print(data)
+    emit('stopped')
 
 
 @sio.on('capture')
 def capture(data):
-    # decrypt image & time out of data
-    # store image somewhere for test 
-    # add it to list of images
-    print("Start Capturing")
+    print("Data from: ", data['side'], "on step: ", data['step'])
+    with open('image_{}_{}.jpg'.format(data['side'],data['step']), 'wb') as f:
+        if data['step'] not in images.keys():
+            images[data['step']] = dict()
+        images[data['step']][data['side']] = Image.open(BytesIO(base64.b64decode(data['image'])))
+
+@sio.on('done')
+def done():
+    ## Do stuff with images
     pass
-
-
-@sio.on('clear')
-def clear():
-    for k in cameras.keys():
-        del cameras[k]
+    
 
 if __name__ == "__main__":
     sio.run(app, '0.0.0.0', 8000, use_reloader=True, log_output=True) 
